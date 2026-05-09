@@ -164,6 +164,10 @@ class MagicPhotoRevelation {
         this.photoCanvas.height = this.cameraView.videoHeight;
         ctx.drawImage(this.cameraView, 0, 0);
         
+        // Configurar canvas de selección con mismo tamaño
+        this.selectionCanvas.width = this.photoCanvas.width;
+        this.selectionCanvas.height = this.photoCanvas.height;
+        
         // Guardar foto y cambiar a SelectAreaActivity
         this.photoData = this.photoCanvas.toDataURL('image/jpeg');
         this.switchActivity('selectArea');
@@ -175,6 +179,8 @@ class MagicPhotoRevelation {
         zoomCtx.drawImage(this.photoCanvas, 0, 0);
         
         console.log('Photo captured, switching to SelectAreaActivity');
+        console.log('Canvas sizes - Photo:', this.photoCanvas.width, 'x', this.photoCanvas.height);
+        console.log('Canvas sizes - Selection:', this.selectionCanvas.width, 'x', this.selectionCanvas.height);
     }
 
     // Select Area Activity - Selection Management
@@ -183,12 +189,16 @@ class MagicPhotoRevelation {
         this.isSelecting = true;
         
         const rect = this.selectionCanvas.getBoundingClientRect();
-        const x = (e.clientX || (e.touches && e.touches[0].clientX)) - rect.left;
-        const y = (e.clientY || (e.touches && e.touches[0].clientY)) - rect.top;
+        const scaleX = this.selectionCanvas.width / rect.width;
+        const scaleY = this.selectionCanvas.height / rect.height;
+        
+        const x = ((e.clientX || (e.touches && e.touches[0].clientX)) - rect.left) * scaleX;
+        const y = ((e.clientY || (e.touches && e.touches[0].clientY)) - rect.top) * scaleY;
         
         this.selectionStart = { x, y };
         this.selectionEnd = { x, y };
         
+        console.log('Selection started at:', x, y);
         this.drawSelection();
     }
 
@@ -197,8 +207,11 @@ class MagicPhotoRevelation {
         e.preventDefault();
         
         const rect = this.selectionCanvas.getBoundingClientRect();
-        const x = (e.clientX || (e.touches && e.touches[0].clientX)) - rect.left;
-        const y = (e.clientY || (e.touches && e.touches[0].clientY)) - rect.top;
+        const scaleX = this.selectionCanvas.width / rect.width;
+        const scaleY = this.selectionCanvas.height / rect.height;
+        
+        const x = ((e.clientX || (e.touches && e.touches[0].clientX)) - rect.left) * scaleX;
+        const y = ((e.clientY || (e.touches && e.touches[0].clientY)) - rect.top) * scaleY;
         
         this.selectionEnd = { x, y };
         this.drawSelection();
@@ -221,9 +234,31 @@ class MagicPhotoRevelation {
             };
             
             console.log('Area selected:', this.selectedArea);
+            
+            // Mostrar feedback visual
+            const info = document.querySelector('.selection-info p');
+            if (info) {
+                info.textContent = `✅ Área seleccionada: ${Math.round(width)}x${Math.round(height)}px`;
+                info.style.color = '#4CAF50';
+            }
+            
+            // Mantener la selección visible por 2 segundos
+            setTimeout(() => {
+                this.clearSelection();
+                if (info) {
+                    info.textContent = 'Dibuja un rectángulo para seleccionar el área';
+                    info.style.color = 'white';
+                }
+            }, 2000);
+        } else {
+            // Área demasiado pequeña
+            const info = document.querySelector('.selection-info p');
+            if (info) {
+                info.textContent = '❌ El área es muy pequeña, intenta de nuevo';
+                info.style.color = '#f44336';
+            }
+            this.clearSelection();
         }
-        
-        this.clearSelection();
     }
 
     drawSelection() {
