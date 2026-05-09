@@ -25,6 +25,15 @@ class MagicPhotoRevelation {
         this.cardTouchAreas = [];
         this.isCardSelectionMode = false;
         
+        // Free drawing system
+        this.freeDrawPath = [];
+        this.isDrawing = false;
+        
+        // Eye detection system
+        this.leftEyePosition = { x: 0, y: 0 };
+        this.rightEyePosition = { x: 0, y: 0 };
+        this.eyesDetected = false;
+        
         this.initializeCards();
         this.initializeElements();
         this.setupEventListeners();
@@ -180,18 +189,22 @@ class MagicPhotoRevelation {
             // Detectar cámaras disponibles
             await this.detectCameras();
             
-            // Iniciar con la cámara actual
+            // Iniciar con la cámara actual - máxima calidad posible
             this.cameraStream = await navigator.mediaDevices.getUserMedia({
                 video: {
                     facingMode: this.currentCamera,
-                    width: { ideal: 1920 },
-                    height: { ideal: 1080 }
+                    width: { ideal: 4096, max: 4096 },
+                    height: { ideal: 2160, max: 2160 },
+                    facingMode: "environment",
+                    aspectRatio: 16/9
                 }
             });
             this.cameraView.srcObject = this.cameraStream;
             
             // Actualizar estado del botón
             this.updateCameraButton();
+            
+            console.log('Camera started with maximum quality');
         } catch (error) {
             console.error('Error accessing camera:', error);
             alert('No se puede acceder a la cámara');
@@ -293,7 +306,7 @@ class MagicPhotoRevelation {
         console.log('Canvas sizes - Selection:', this.selectionCanvas.width, 'x', this.selectionCanvas.height);
     }
 
-    // Select Area Activity - Selection Management
+    // Select Area Activity - Free Drawing with Finger
     startSelection(e) {
         e.preventDefault();
         this.isSelecting = true;
@@ -308,12 +321,16 @@ class MagicPhotoRevelation {
         this.selectionStart = { x, y };
         this.selectionEnd = { x, y };
         
-        console.log('Selection started at:', x, y);
-        this.drawSelection();
+        // Iniciar trazo libre
+        this.freeDrawPath = [{x, y}];
+        this.isDrawing = true;
+        
+        console.log('Free drawing started at:', x, y);
+        this.drawFreeSelection();
     }
 
     updateSelection(e) {
-        if (!this.isSelecting) return;
+        if (!this.isSelecting || !this.isDrawing) return;
         e.preventDefault();
         
         const rect = this.selectionCanvas.getBoundingClientRect();
@@ -323,8 +340,11 @@ class MagicPhotoRevelation {
         const x = ((e.clientX || (e.touches && e.touches[0].clientX)) - rect.left) * scaleX;
         const y = ((e.clientY || (e.touches && e.touches[0].clientY)) - rect.top) * scaleY;
         
-        this.selectionEnd = { x, y };
-        this.drawSelection();
+        // Añadir punto al trazo libre
+        this.freeDrawPath.push({x, y});
+        
+        console.log('Free drawing updated at:', x, y);
+        this.drawFreeSelection();
     }
 
     endSelection(e) {
@@ -371,6 +391,37 @@ class MagicPhotoRevelation {
         }
     }
 
+    drawFreeSelection() {
+        const ctx = this.selectionCanvas.getContext('2d');
+        ctx.clearRect(0, 0, this.selectionCanvas.width, this.selectionCanvas.height);
+        
+        if (!this.isDrawing) return;
+        
+        // Dibujar trazo libre con efecto de pincel
+        ctx.strokeStyle = '#8a2be2';
+        ctx.lineWidth = 4;
+        ctx.lineCap = 'round';
+        ctx.lineJoin = 'round';
+        ctx.setLineDash([]);
+        
+        ctx.beginPath();
+        ctx.moveTo(this.freeDrawPath[0].x, this.freeDrawPath[0].y);
+        
+        for (let i = 1; i < this.freeDrawPath.length; i++) {
+            ctx.lineTo(this.freeDrawPath[i].x, this.freeDrawPath[i].y);
+        }
+        
+        ctx.stroke();
+        
+        // Dibujar puntos de control del trazo
+        ctx.fillStyle = '#8a2be2';
+        for (let point of this.freeDrawPath) {
+            ctx.beginPath();
+            ctx.arc(point.x, point.y, 3, 0, Math.PI * 2);
+            ctx.fill();
+        }
+    }
+
     drawSelection() {
         const ctx = this.selectionCanvas.getContext('2d');
         ctx.clearRect(0, 0, this.selectionCanvas.width, this.selectionCanvas.height);
@@ -394,12 +445,16 @@ class MagicPhotoRevelation {
         // Draw corner handles
         ctx.setLineDash([]);
         ctx.fillStyle = '#8a2be2';
-        const handleSize = 12;
+        const handleSize = 10;
         
-        ctx.fillRect(x - handleSize/2, y - handleSize/2, handleSize, handleSize); // NW
-        ctx.fillRect(x + width - handleSize/2, y - handleSize/2, handleSize, handleSize); // NE
-        ctx.fillRect(x - handleSize/2, y + height - handleSize/2, handleSize, handleSize); // SW
-        ctx.fillRect(x + width - handleSize/2, y + height - handleSize/2, handleSize, handleSize); // SE
+        // Top-left
+        ctx.fillRect(x - handleSize/2, y - handleSize/2, handleSize, handleSize);
+        // Top-right
+        ctx.fillRect(x + width - handleSize/2, y - handleSize/2, handleSize, handleSize);
+        // Bottom-left
+        ctx.fillRect(x - handleSize/2, y + height - handleSize/2, handleSize, handleSize);
+        // Bottom-right
+        ctx.fillRect(x + width - handleSize/2, y + height - handleSize/2, handleSize, handleSize);
     }
 
     clearSelection() {
@@ -423,31 +478,156 @@ class MagicPhotoRevelation {
         
         this.switchActivity('zoom');
         
-        // Hacer zoom al centro de la foto (área del ojo)
-        this.zoomToEye();
+        // Detectar ojos y hacer zoom binocular
+        this.detectEyesAndZoom();
         
-        // Activar modo de selección de cartas
-        this.activateCardSelectionMode();
+        // Pequeña pausa para simular comportamiento nativo
+        setTimeout(() => {
+            // Activar modo de selección de cartas
+            this.activateCardSelectionMode();
+        }, 500);
+    }
+
+    detectEyesAndZoom() {
+        // Analizar la foto para detectar ambos ojos
+        this.detectEyes();
+        
+        if (this.eyesDetected) {
+            // Zoom binocular centrado entre los ojos
+            this.zoomToBothEyes();
+        } else {
+            // Zoom normal al centro
+            this.zoomToEye();
+        }
+    }
+
+    detectEyes() {
+        // Simular detección de ojos usando análisis de la foto
+        const ctx = this.photoCanvas.getContext('2d');
+        const imageData = ctx.getImageData(0, 0, this.photoCanvas.width, this.photoCanvas.height);
+        const data = imageData.data;
+        
+        // Buscar patrones de ojos (áreas brillantes y redondas)
+        const eyeCandidates = [];
+        
+        // Dividir la cara en zonas superiores e inferiores
+        const faceWidth = this.photoCanvas.width;
+        const faceHeight = this.photoCanvas.height;
+        const upperFaceY = faceHeight * 0.3;
+        const lowerFaceY = faceHeight * 0.7;
+        
+        // Escanear por posibles ojos
+        for (let y = upperFaceY; y < lowerFaceY; y += 20) {
+            for (let x = faceWidth * 0.2; x < faceWidth * 0.8; x += 30) {
+                const centerX = x + 15;
+                const centerY = y + 10;
+                
+                // Analizar brillo y color en esta área
+                let brightness = 0;
+                let pixelCount = 0;
+                
+                for (let dy = -10; dy <= 10; dy++) {
+                    for (let dx = -15; dx <= 15; dx++) {
+                        const pixelX = Math.floor(centerX + dx);
+                        const pixelY = Math.floor(centerY + dy);
+                        
+                        if (pixelX >= 0 && pixelX < faceWidth && pixelY >= 0 && pixelY < faceHeight) {
+                            const index = (pixelY * faceWidth + pixelX) * 4;
+                            const r = data[index];
+                            const g = data[index + 1];
+                            const b = data[index + 2];
+                            
+                            brightness += (r + g + b) / 3;
+                            pixelCount++;
+                        }
+                    }
+                }
+                
+                const avgBrightness = brightness / pixelCount;
+                
+                // Si es suficientemente brillante y redondeado, podría ser un ojo
+                if (avgBrightness > 180 && pixelCount > 50) {
+                    eyeCandidates.push({
+                        x: centerX,
+                        y: centerY,
+                        brightness: avgBrightness,
+                        confidence: Math.min(pixelCount / 100, 1)
+                    });
+                }
+            }
+        }
+        
+        // Ordenar por confianza y tomar los 2 mejores
+        eyeCandidates.sort((a, b) => b.confidence - a.confidence);
+        
+        if (eyeCandidates.length >= 2) {
+            this.leftEyePosition = eyeCandidates[0];
+            this.rightEyePosition = eyeCandidates[1];
+            this.eyesDetected = true;
+            
+            console.log('Eyes detected:', this.leftEyePosition, this.rightEyePosition);
+        } else {
+            this.eyesDetected = false;
+            console.log('No eyes detected, using center zoom');
+        }
+    }
+
+    zoomToBothEyes() {
+        // Calcular punto medio entre los ojos
+        const midX = (this.leftEyePosition.x + this.rightEyePosition.x) / 2;
+        const midY = (this.leftEyePosition.y + this.rightEyePosition.y) / 2;
+        
+        // Zoom con animación suave al punto medio
+        this.animateZoomTo(4, midX, midY);
+        
+        console.log('Zooming to both eyes center:', midX, midY);
     }
 
     zoomToEye() {
-        // Calcular el centro de la foto (donde estaría el ojo)
+        // Calcular el centro de la foto (donde estaría el ojo) - como en APK
         const centerX = this.zoomCanvas.width / 2;
         const centerY = this.zoomCanvas.height / 2;
         
-        // Aplicar zoom al centro
-        this.zoomScale = 3; // Zoom moderado al ojo
-        this.zoomOffsetX = 0;
-        this.zoomOffsetY = 0;
+        // Aplicar zoom al centro con animación suave - como en app nativa
+        this.animateZoomTo(3, centerX, centerY);
         
-        // Centrar en el ojo
-        const zoomCtx = this.zoomCanvas.getContext('2d');
-        zoomCtx.save();
-        zoomCtx.scale(this.zoomScale, this.zoomScale);
-        zoomCtx.drawImage(this.photoCanvas, 0, 0);
-        zoomCtx.restore();
+        console.log('Zooming to eye center:', centerX, centerY);
+    }
+
+    animateZoomTo(targetScale, centerX, centerY) {
+        const startScale = this.zoomScale;
+        const duration = 800; // ms
+        const startTime = Date.now();
         
-        console.log('Zoomed to eye center:', centerX, centerY);
+        const animate = () => {
+            const elapsed = Date.now() - startTime;
+            const progress = Math.min(elapsed / duration, 1);
+            
+            // Easing function para animación suave
+            const easeProgress = 1 - Math.pow(1 - progress, 3);
+            this.zoomScale = startScale + (targetScale - startScale) * easeProgress;
+            
+            // Aplicar zoom centrado
+            const zoomCtx = this.zoomCanvas.getContext('2d');
+            zoomCtx.clearRect(0, 0, this.zoomCanvas.width, this.zoomCanvas.height);
+            zoomCtx.save();
+            zoomCtx.scale(this.zoomScale, this.zoomScale);
+            
+            // Calcular offset para mantener el centro
+            const scaledWidth = this.photoCanvas.width * this.zoomScale;
+            const scaledHeight = this.photoCanvas.height * this.zoomScale;
+            this.zoomOffsetX = (this.zoomCanvas.width - scaledWidth) / 2;
+            this.zoomOffsetY = (this.zoomCanvas.height - scaledHeight) / 2;
+            
+            zoomCtx.drawImage(this.photoCanvas, this.zoomOffsetX / this.zoomScale, this.zoomOffsetY / this.zoomScale);
+            zoomCtx.restore();
+            
+            if (progress < 1) {
+                requestAnimationFrame(animate);
+            }
+        };
+        
+        requestAnimationFrame(animate);
     }
 
     activateCardSelectionMode() {
@@ -458,47 +638,27 @@ class MagicPhotoRevelation {
         const canvasWidth = this.zoomCanvas.width;
         const canvasHeight = this.zoomCanvas.height;
         
-        // Crear áreas de toque para las cartas (4x13 grid) - ajustado para móviles
-        const cardWidth = Math.min(60, canvasWidth / 15); // Más pequeño en móviles
-        const cardHeight = Math.min(90, canvasHeight / 6);
-        const spacing = 5;
-        const startX = (canvasWidth - (13 * (cardWidth + spacing))) / 2;
-        const startY = (canvasHeight - (4 * (cardHeight + spacing))) / 2;
-        
-        for (let row = 0; row < 4; row++) {
-            for (let col = 0; col < 13; col++) {
-                const cardIndex = row * 13 + col;
-                const x = startX + col * (cardWidth + spacing);
-                const y = startY + row * (cardHeight + spacing);
-                
-                this.cardTouchAreas.push({
-                    x: x,
-                    y: y,
-                    width: cardWidth,
-                    height: cardHeight,
-                    card: this.cards[cardIndex],
-                    index: cardIndex
-                });
-            }
-        }
+        // Dividir pantalla en zonas de cartas según colores
+        this.createCardZones(canvasWidth, canvasHeight);
         
         // Ocultar input de predicción y mostrar instrucciones
         this.predictionText.style.display = 'none';
         this.revealBtn.style.display = 'none';
         
-        // Añadir instrucciones mejoradas
+        // Añadir instrucciones mejoradas para flujo nativo
         const instructions = document.createElement('div');
         instructions.id = 'cardInstructions';
         instructions.innerHTML = `
-            <p>🎴 Toca una carta para seleccionarla</p>
-            <p style="font-size: 12px; opacity: 0.8;">Grid: 4x13 cartas</p>
+            <p>🎴 Toca la zona del color que quieres</p>
+            <p style="font-size: 12px; opacity: 0.8;">Rojo: 1-6 | Negro: 7-12</p>
+            <p style="font-size: 10px; opacity: 0.6;">Diamantes: 1-6 | Corazones: 7-12</p>
         `;
         instructions.style.cssText = `
             position: absolute;
             top: 20px;
             left: 50%;
             transform: translateX(-50%);
-            background: linear-gradient(45deg, rgba(138, 43, 226, 0.9), rgba(156, 39, 176, 0.9));
+            background: linear-gradient(45deg, rgba(220, 20, 60, 0.95), rgba(180, 20, 60, 0.95));
             color: white;
             padding: 15px 25px;
             border-radius: 25px;
@@ -506,43 +666,104 @@ class MagicPhotoRevelation {
             z-index: 100;
             backdrop-filter: blur(10px);
             border: 2px solid rgba(255, 255, 255, 0.3);
-            box-shadow: 0 4px 20px rgba(138, 43, 226, 0.4);
+            box-shadow: 0 4px 20px rgba(220, 20, 60, 0.4);
             text-align: center;
         `;
         this.zoomActivity.appendChild(instructions);
         
-        // Dibujar grid visual para ayudar al usuario
-        this.drawCardGrid();
+        // Dibujar zonas visuales para ayudar al usuario
+        this.drawCardZones();
         
-        console.log('Card selection mode activated');
+        console.log('Card selection mode activated with zones');
         console.log('Canvas size:', canvasWidth, 'x', canvasHeight);
-        console.log('Card areas created:', this.cardTouchAreas.length);
+        console.log('Card zones created:', this.cardTouchAreas.length);
     }
 
-    drawCardGrid() {
+    createCardZones(canvasWidth, canvasHeight) {
+        // Zona roja (cartas 1-6)
+        this.createZone('red', canvasWidth * 0.25, canvasHeight * 0.5, 'hearts', 1, 6);
+        
+        // Zona negra (cartas 7-12)
+        this.createZone('black', canvasWidth * 0.75, canvasHeight * 0.5, 'spades', 7, 12);
+        
+        // Zona roja (diamantes 1-6)
+        this.createZone('red', canvasWidth * 0.25, canvasHeight * 0.5, 'diamonds', 1, 6);
+        
+        // Zona negra (corazones 7-12)
+        this.createZone('black', canvasWidth * 0.75, canvasHeight * 0.5, 'clubs', 7, 12);
+    }
+
+    createZone(color, x, y, suit, startValue, endValue) {
+        const zoneWidth = 200;
+        const zoneHeight = canvasHeight * 0.4;
+        const spacing = 10;
+        
+        for (let i = startValue; i <= endValue; i++) {
+            const cardIndex = this.cards.findIndex(card => 
+                card.suit === suit && parseInt(card.value) === i
+            );
+            
+            if (cardIndex !== -1) {
+                const card = this.cards[cardIndex];
+                const row = Math.floor((i - startValue) / 4);
+                const col = (i - startValue) % 4;
+                
+                const cardX = x + col * (zoneWidth + spacing);
+                const cardY = y + row * (zoneHeight + spacing);
+                
+                this.cardTouchAreas.push({
+                    x: cardX,
+                    y: cardY,
+                    width: zoneWidth,
+                    height: zoneHeight,
+                    card: card,
+                    index: cardIndex,
+                    zone: color,
+                    value: i
+                });
+            }
+        }
+    }
+
+    drawCardZones() {
         const ctx = this.zoomCanvas.getContext('2d');
         
         // Dibujar fondo semi-transparente
         ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
         ctx.fillRect(0, 0, this.zoomCanvas.width, this.zoomCanvas.height);
         
-        // Dibujar áreas de cartas
-        ctx.strokeStyle = 'rgba(255, 255, 255, 0.2)';
-        ctx.lineWidth = 1;
-        ctx.setLineDash([5, 5]);
-        
+        // Dibujar zonas de cartas
         for (let area of this.cardTouchAreas) {
+            // Color de fondo según zona
+            if (area.zone === 'red') {
+                ctx.fillStyle = 'rgba(255, 200, 200, 0.2)';
+            } else if (area.zone === 'black') {
+                ctx.fillStyle = 'rgba(50, 50, 50, 0.2)';
+            }
+            
+            ctx.fillRect(area.x, area.y, area.width, area.height);
+            
+            // Borde de zona
+            ctx.strokeStyle = area.zone === 'red' ? 'rgba(255, 100, 100, 0.8)' : 'rgba(255, 255, 255, 0.8)';
+            ctx.lineWidth = 2;
+            ctx.setLineDash([]);
             ctx.strokeRect(area.x, area.y, area.width, area.height);
+            
+            // Etiqueta de zona
+            ctx.fillStyle = 'white';
+            ctx.font = 'bold 12px Arial';
+            ctx.textAlign = 'center';
+            ctx.fillText(area.zone.toUpperCase(), area.x + area.width/2, area.y + 20);
         }
         
         // Añadir números de carta para referencia
-        ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
         ctx.font = '10px Arial';
         ctx.setLineDash([]);
         
         for (let i = 0; i < this.cardTouchAreas.length; i++) {
             const area = this.cardTouchAreas[i];
-            ctx.fillText(i + 1, area.x + 2, area.y + 12);
+            ctx.fillText(area.value, area.x + area.width/2, area.y + 12);
         }
     }
 
@@ -631,7 +852,7 @@ class MagicPhotoRevelation {
         
         let x, y;
         if (e.touches && e.touches.length > 0) {
-            // Touch event
+            // Touch event - más preciso para móviles
             x = (e.touches[0].clientX - rect.left) * scaleX;
             y = (e.touches[0].clientY - rect.top) * scaleY;
         } else {
@@ -640,20 +861,39 @@ class MagicPhotoRevelation {
             y = (e.clientY - rect.top) * scaleY;
         }
         
-        console.log('Touch coordinates:', x, y);
-        console.log('Card areas:', this.cardTouchAreas.length);
+        // Feedback visual del toque
+        this.showTouchFeedback(x, y);
         
         // Verificar si el toque está en un área de carta
         for (let area of this.cardTouchAreas) {
             if (x >= area.x && x <= area.x + area.width &&
                 y >= area.y && y <= area.y + area.height) {
-                console.log('Card selected:', area.card.name, 'of', area.card.suit);
+                console.log('Card selected:', area.card.name, 'of', area.card.suit, 'from zone:', area.zone);
                 this.selectCard(area.card, area);
                 return;
             }
         }
         
         console.log('No card area touched at:', x, y);
+    }
+
+    showTouchFeedback(x, y) {
+        // Mostrar feedback visual del toque
+        const ctx = this.zoomCanvas.getContext('2d');
+        
+        // Dibujar círculo de feedback
+        ctx.save();
+        ctx.strokeStyle = 'rgba(138, 43, 226, 0.8)';
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.arc(x, y, 20, 0, 2 * Math.PI);
+        ctx.stroke();
+        ctx.restore();
+        
+        // Eliminar feedback después de 200ms
+        setTimeout(() => {
+            this.drawCardGrid();
+        }, 200);
     }
 
     selectCard(card, area) {
@@ -678,36 +918,160 @@ class MagicPhotoRevelation {
         // Cargar la imagen de la carta
         const img = new Image();
         img.onload = () => {
-            // Dibujar la carta sobre el área seleccionada
-            ctx.save();
-            
-            // Aplicar zoom actual
-            ctx.scale(this.zoomScale, this.zoomScale);
-            
-            // Dibujar la carta en el área seleccionada con efecto mágico
-            const cardWidth = this.selectedArea.width;
-            const cardHeight = this.selectedArea.height;
-            
-            // Efecto de aparición gradual
-            ctx.globalAlpha = 0;
-            const fadeIn = setInterval(() => {
-                ctx.clearRect(0, 0, this.zoomCanvas.width, this.zoomCanvas.height);
-                
-                // Redibujar la foto con zoom
-                ctx.drawImage(this.photoCanvas, 0, 0);
-                
-                // Dibujar la carta con transparencia creciente
-                ctx.globalAlpha += 0.1;
-                ctx.drawImage(img, this.selectedArea.x, this.selectedArea.y, cardWidth, cardHeight);
-                
-                if (ctx.globalAlpha >= 1) {
-                    clearInterval(fadeIn);
-                }
-            }, 50);
-            
-            ctx.restore();
+            // Efecto mágico mejorado - como en APK nativa
+            this.performMagicReveal(card, img);
         };
         img.src = card.image;
+    }
+
+    performMagicReveal(card, img) {
+        // Vibración al seleccionar carta - como en APK nativa
+        if ('vibrate' in navigator) {
+            navigator.vibrate([100, 50, 100]);
+        }
+        
+        // Sonido mágico al seleccionar carta
+        this.playMagicSound();
+        
+        const ctx = this.zoomCanvas.getContext('2d');
+        
+        // Crear efecto de partículas mágicas más elaborado
+        const particles = [];
+        for (let i = 0; i < 30; i++) {
+            particles.push({
+                x: this.selectedArea.x + this.selectedArea.width / 2,
+                y: this.selectedArea.y + this.selectedArea.height / 2,
+                vx: (Math.random() - 0.5) * 6,
+                vy: (Math.random() - 0.5) * 6,
+                size: Math.random() * 4 + 2,
+                alpha: 1,
+                color: `hsl(${Math.random() * 60 + 260}, 100%, 70%)`,
+                type: Math.random() > 0.5 ? 'sparkle' : 'glow'
+            });
+        }
+        
+        // Animación de revelación mágica mejorada
+        let frame = 0;
+        const maxFrames = 80;
+        
+        const animate = () => {
+            ctx.clearRect(0, 0, this.zoomCanvas.width, this.zoomCanvas.height);
+            
+            // Redibujar la foto con zoom
+            ctx.save();
+            ctx.scale(this.zoomScale, this.zoomScale);
+            ctx.drawImage(this.photoCanvas, 0, 0);
+            ctx.restore();
+            
+            // Actualizar partículas con física mejorada
+            particles.forEach(particle => {
+                particle.x += particle.vx;
+                particle.y += particle.vy;
+                particle.alpha -= 0.015;
+                particle.size *= 0.985;
+                particle.vy += 0.1; // Gravedad
+                
+                if (particle.type === 'sparkle') {
+                    // Efecto de destello
+                    ctx.save();
+                    ctx.globalAlpha = particle.alpha;
+                    ctx.fillStyle = particle.color;
+                    ctx.shadowColor = particle.color;
+                    ctx.shadowBlur = 10;
+                    ctx.beginPath();
+                    ctx.arc(particle.x, particle.y, particle.size, 0, Math.PI * 2);
+                    ctx.fill();
+                    ctx.restore();
+                } else {
+                    // Efecto de brillo
+                    ctx.save();
+                    ctx.globalAlpha = particle.alpha * 0.5;
+                    ctx.fillStyle = particle.color;
+                    ctx.shadowColor = particle.color;
+                    ctx.shadowBlur = 20;
+                    ctx.beginPath();
+                    ctx.arc(particle.x, particle.y, particle.size * 1.5, 0, Math.PI * 2);
+                    ctx.fill();
+                    ctx.restore();
+                }
+            });
+            
+            // Dibujar la carta con efecto de aparición mejorado
+            const progress = frame / maxFrames;
+            const easeProgress = 1 - Math.pow(1 - progress, 3);
+            
+            ctx.save();
+            ctx.globalAlpha = easeProgress;
+            ctx.scale(this.zoomScale, this.zoomScale);
+            
+            // Efectos mágicos mejorados
+            ctx.shadowColor = 'rgba(138, 43, 226, 0.9)';
+            ctx.shadowBlur = 30 * easeProgress;
+            ctx.shadowOffsetX = 0;
+            ctx.shadowOffsetY = 0;
+            
+            // Añadir brillo adicional
+            const gradient = ctx.createRadialGradient(
+                this.selectedArea.x + this.selectedArea.width / 2,
+                this.selectedArea.y + this.selectedArea.height / 2,
+                0,
+                this.selectedArea.x + this.selectedArea.width / 2,
+                this.selectedArea.y + this.selectedArea.height / 2,
+                Math.max(this.selectedArea.width, this.selectedArea.height)
+            );
+            gradient.addColorStop(0, 'rgba(255, 255, 255, 0.8)');
+            gradient.addColorStop(0.5, 'rgba(138, 43, 226, 0.4)');
+            gradient.addColorStop(1, 'rgba(138, 43, 226, 0)');
+            
+            ctx.fillStyle = gradient;
+            ctx.fillRect(
+                this.selectedArea.x - 10,
+                this.selectedArea.y - 10,
+                this.selectedArea.width + 20,
+                this.selectedArea.height + 20
+            );
+            
+            ctx.drawImage(img, this.selectedArea.x, this.selectedArea.y, 
+                      this.selectedArea.width, this.selectedArea.height);
+            ctx.restore();
+            
+            frame++;
+            
+            if (frame < maxFrames) {
+                requestAnimationFrame(animate);
+            } else {
+                // Revelación completa - vibración de éxito
+                if ('vibrate' in navigator) {
+                    navigator.vibrate([200, 100, 200]);
+                }
+                
+                setTimeout(() => {
+                    this.goToResult();
+                }, 500);
+            }
+        };
+        
+        requestAnimationFrame(animate);
+    }
+
+    playMagicSound() {
+        // Crear sonido mágico simple
+        const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        const oscillator = audioContext.createOscillator();
+        const gainNode = audioContext.createGain();
+        
+        oscillator.connect(gainNode);
+        gainNode.connect(audioContext.destination);
+        
+        oscillator.frequency.setValueAtTime(800, audioContext.currentTime);
+        oscillator.frequency.exponentialRampToValueAtTime(1200, audioContext.currentTime + 0.1);
+        oscillator.frequency.exponentialRampToValueAtTime(600, audioContext.currentTime + 0.2);
+        
+        gainNode.gain.setValueAtTime(0.1, audioContext.currentTime);
+        gainNode.gain.exponentialRampToValueAtTime(0, audioContext.currentTime + 0.3);
+        
+        oscillator.start(audioContext.currentTime);
+        oscillator.stop(audioContext.currentTime + 0.3);
     }
 
     exitCardSelectionMode() {
