@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Magic Photo Revelation</title>
+    <link rel="manifest" href="manifest.json">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <!-- Splash Activity -->
+    <div id="splashActivity" class="activity">
+        <div class="splash-content">
+            <div class="logo">🎯</div>
+            <h1>Magic Photo Revelation</h1>
+            <div class="loading"></div>
+        </div>
+    </div>
+
+    <!-- Main Activity -->
+    <div id="mainActivity" class="activity" style="display: none;">
+        <video id="cameraView" autoplay playsinline></video>
+        <div class="camera-controls">
+            <button id="captureBtn" class="capture-btn">📷</button>
+            <button id="galleryBtn" class="gallery-btn">📸</button>
+        </div>
+    </div>
+
+    <!-- Select Area Activity -->
+    <div id="selectAreaActivity" class="activity" style="display: none;">
+        <canvas id="photoCanvas"></canvas>
+        <canvas id="selectionCanvas"></canvas>
+        <div class="select-controls">
+            <button id="backBtn" class="back-btn">←</button>
+            <button id="confirmAreaBtn" class="confirm-btn">✓</button>
+            <button id="zoomBtn" class="zoom-btn">🔍</button>
+        </div>
+        <div class="selection-info">
+            <p>Dibuja un rectángulo para seleccionar el área</p>
+        </div>
+    </div>
+
+    <!-- Zoom Activity -->
+    <div id="zoomActivity" class="activity" style="display: none;">
+        <canvas id="zoomCanvas"></canvas>
+        <div class="zoom-controls">
+            <button id="zoomInBtn" class="zoom-control">+</button>
+            <button id="zoomOutBtn" class="zoom-control">-</button>
+            <button id="resetZoomBtn" class="zoom-control">🔄</button>
+            <button id="backToSelectBtn" class="back-btn">←</button>
+        </div>
+        <div class="prediction-input">
+            <input type="text" id="predictionText" placeholder="Escribe tu predicción...">
+            <button id="revealBtn" class="reveal-btn">✨ Revelar</button>
+        </div>
+    </div>
+
+    <!-- Result View -->
+    <div id="resultView" class="activity" style="display: none;">
+        <canvas id="resultCanvas"></canvas>
+        <div class="result-controls">
+            <button id="newPhotoBtn" class="new-photo-btn">📷 Nueva Foto</button>
+            <button id="saveBtn" class="save-btn">💾 Guardar</button>
+            <button id="shareBtn" class="share-btn">📤 Compartir</button>
+        </div>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>
