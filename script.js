@@ -454,12 +454,16 @@ class MagicPhotoRevelation {
         this.isCardSelectionMode = true;
         this.cardTouchAreas = [];
         
-        // Crear áreas de toque para las cartas (4x13 grid)
-        const cardWidth = 80;
-        const cardHeight = 120;
-        const spacing = 10;
-        const startX = 50;
-        const startY = 100;
+        // Obtener dimensiones del canvas
+        const canvasWidth = this.zoomCanvas.width;
+        const canvasHeight = this.zoomCanvas.height;
+        
+        // Crear áreas de toque para las cartas (4x13 grid) - ajustado para móviles
+        const cardWidth = Math.min(60, canvasWidth / 15); // Más pequeño en móviles
+        const cardHeight = Math.min(90, canvasHeight / 6);
+        const spacing = 5;
+        const startX = (canvasWidth - (13 * (cardWidth + spacing))) / 2;
+        const startY = (canvasHeight - (4 * (cardHeight + spacing))) / 2;
         
         for (let row = 0; row < 4; row++) {
             for (let col = 0; col < 13; col++) {
@@ -482,26 +486,64 @@ class MagicPhotoRevelation {
         this.predictionText.style.display = 'none';
         this.revealBtn.style.display = 'none';
         
-        // Añadir instrucciones
+        // Añadir instrucciones mejoradas
         const instructions = document.createElement('div');
         instructions.id = 'cardInstructions';
-        instructions.innerHTML = '<p>Toca una carta para seleccionarla</p>';
+        instructions.innerHTML = `
+            <p>🎴 Toca una carta para seleccionarla</p>
+            <p style="font-size: 12px; opacity: 0.8;">Grid: 4x13 cartas</p>
+        `;
         instructions.style.cssText = `
             position: absolute;
             top: 20px;
             left: 50%;
             transform: translateX(-50%);
-            background: rgba(0, 0, 0, 0.8);
+            background: linear-gradient(45deg, rgba(138, 43, 226, 0.9), rgba(156, 39, 176, 0.9));
             color: white;
             padding: 15px 25px;
             border-radius: 25px;
             font-size: 16px;
             z-index: 100;
             backdrop-filter: blur(10px);
+            border: 2px solid rgba(255, 255, 255, 0.3);
+            box-shadow: 0 4px 20px rgba(138, 43, 226, 0.4);
+            text-align: center;
         `;
         this.zoomActivity.appendChild(instructions);
         
+        // Dibujar grid visual para ayudar al usuario
+        this.drawCardGrid();
+        
         console.log('Card selection mode activated');
+        console.log('Canvas size:', canvasWidth, 'x', canvasHeight);
+        console.log('Card areas created:', this.cardTouchAreas.length);
+    }
+
+    drawCardGrid() {
+        const ctx = this.zoomCanvas.getContext('2d');
+        
+        // Dibujar fondo semi-transparente
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
+        ctx.fillRect(0, 0, this.zoomCanvas.width, this.zoomCanvas.height);
+        
+        // Dibujar áreas de cartas
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.2)';
+        ctx.lineWidth = 1;
+        ctx.setLineDash([5, 5]);
+        
+        for (let area of this.cardTouchAreas) {
+            ctx.strokeRect(area.x, area.y, area.width, area.height);
+        }
+        
+        // Añadir números de carta para referencia
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
+        ctx.font = '10px Arial';
+        ctx.setLineDash([]);
+        
+        for (let i = 0; i < this.cardTouchAreas.length; i++) {
+            const area = this.cardTouchAreas[i];
+            ctx.fillText(i + 1, area.x + 2, area.y + 12);
+        }
     }
 
     // Zoom Activity - Zoom and Pan
@@ -567,6 +609,7 @@ class MagicPhotoRevelation {
     }
 
     handleZoomCanvasTouch(e) {
+        e.preventDefault();
         if (this.isCardSelectionMode && e.touches.length === 1) {
             this.handleCardSelection(e);
         } else if (e.touches.length === 1) {
@@ -583,17 +626,34 @@ class MagicPhotoRevelation {
         e.preventDefault();
         
         const rect = this.zoomCanvas.getBoundingClientRect();
-        const x = (e.clientX || (e.touches && e.touches[0].clientX)) - rect.left;
-        const y = (e.clientY || (e.touches && e.touches[0].clientY)) - rect.top;
+        const scaleX = this.zoomCanvas.width / rect.width;
+        const scaleY = this.zoomCanvas.height / rect.height;
+        
+        let x, y;
+        if (e.touches && e.touches.length > 0) {
+            // Touch event
+            x = (e.touches[0].clientX - rect.left) * scaleX;
+            y = (e.touches[0].clientY - rect.top) * scaleY;
+        } else {
+            // Mouse event
+            x = (e.clientX - rect.left) * scaleX;
+            y = (e.clientY - rect.top) * scaleY;
+        }
+        
+        console.log('Touch coordinates:', x, y);
+        console.log('Card areas:', this.cardTouchAreas.length);
         
         // Verificar si el toque está en un área de carta
         for (let area of this.cardTouchAreas) {
             if (x >= area.x && x <= area.x + area.width &&
                 y >= area.y && y <= area.y + area.height) {
+                console.log('Card selected:', area.card.name, 'of', area.card.suit);
                 this.selectCard(area.card, area);
-                break;
+                return;
             }
         }
+        
+        console.log('No card area touched at:', x, y);
     }
 
     selectCard(card, area) {

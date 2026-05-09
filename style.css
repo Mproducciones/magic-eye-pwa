@@ -2,6 +2,10 @@
     margin: 0;
     padding: 0;
     box-sizing: border-box;
+    -webkit-tap-highlight-color: transparent;
+    -webkit-touch-callout: none;
+    -webkit-user-select: none;
+    user-select: none;
 }
 
 body, html {
@@ -397,16 +401,17 @@ body, html {
     }
 }
 
-/* Responsive */
-@media (max-width: 600px) {
+/* Mobile Responsive */
+@media (max-width: 768px) {
     .camera-controls {
         gap: 15px;
+        bottom: 30px;
     }
     
     .capture-btn {
-        width: 60px;
-        height: 60px;
-        font-size: 24px;
+        width: 70px;
+        height: 70px;
+        font-size: 28px;
     }
     
     .gallery-btn {
@@ -415,14 +420,9 @@ body, html {
         font-size: 20px;
     }
     
-    .switch-camera-btn {
-        width: 50px;
-        height: 50px;
-        font-size: 20px;
-    }
-    
     .select-controls {
         gap: 10px;
+        bottom: 30px;
     }
     
     .back-btn, .confirm-btn, .zoom-btn {
@@ -431,27 +431,56 @@ body, html {
         font-size: 20px;
     }
     
-    .selection-info {
-        font-size: 12px;
-        padding: 10px 20px;
+    .zoom-controls {
+        gap: 10px;
+        bottom: 30px;
+    }
+    
+    .zoom-in-btn, .zoom-out-btn, .reset-zoom-btn, .back-to-select-btn {
+        width: 50px;
+        height: 50px;
+        font-size: 20px;
     }
     
     .prediction-input {
-        flex-direction: column;
+        padding: 15px;
+        font-size: 16px;
         width: 90%;
-        padding: 10px;
     }
     
-    #predictionText {
-        width: 100%;
+    .reveal-btn {
+        padding: 15px 30px;
+        font-size: 18px;
     }
     
     .result-controls {
         gap: 10px;
+        bottom: 30px;
     }
     
     .new-photo-btn, .save-btn, .share-btn {
-        padding: 10px 15px;
-        font-size: 12px;
+        width: 50px;
+        height: 50px;
+        font-size: 20px;
+    }
+    
+    /* Mejoras para touch en móviles */
+    .activity {
+        touch-action: none;
+        -webkit-touch-callout: none;
+        -webkit-user-select: none;
+        user-select: none;
+    }
+    
+    canvas {
+        touch-action: none;
+        -webkit-touch-callout: none;
+        -webkit-user-select: none;
+        user-select: none;
+    }
+    
+    button {
+        touch-action: manipulation;
+        -webkit-tap-highlight-color: transparent;
     }
 }
