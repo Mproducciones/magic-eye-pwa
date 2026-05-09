@@ -15,6 +15,10 @@ class MagicPhotoRevelation {
         this.selectionStart = { x: 0, y: 0 };
         this.selectionEnd = { x: 0, y: 0 };
         
+        // Camera switching
+        this.currentCamera = 'environment'; // 'user' for front, 'environment' for back
+        this.availableCameras = [];
+        
         this.initializeElements();
         this.setupEventListeners();
         this.startApp();
@@ -31,6 +35,7 @@ class MagicPhotoRevelation {
         // Main Activity Elements
         this.cameraView = document.getElementById('cameraView');
         this.captureBtn = document.getElementById('captureBtn');
+        this.switchCameraBtn = document.getElementById('switchCameraBtn');
 
         // Select Area Elements
         this.photoCanvas = document.getElementById('photoCanvas');
@@ -58,6 +63,7 @@ class MagicPhotoRevelation {
     setupEventListeners() {
         // Main Activity
         this.captureBtn.addEventListener('click', () => this.capturePhoto());
+        this.switchCameraBtn.addEventListener('click', () => this.switchCamera());
 
         // Select Area Activity
         this.backBtn.addEventListener('click', () => this.backToMain());
@@ -143,17 +149,93 @@ class MagicPhotoRevelation {
 
     async startCamera() {
         try {
+            // Detectar cámaras disponibles
+            await this.detectCameras();
+            
+            // Iniciar con la cámara actual
             this.cameraStream = await navigator.mediaDevices.getUserMedia({
                 video: {
-                    facingMode: 'environment',
+                    facingMode: this.currentCamera,
                     width: { ideal: 1920 },
                     height: { ideal: 1080 }
                 }
             });
             this.cameraView.srcObject = this.cameraStream;
+            
+            // Actualizar estado del botón
+            this.updateCameraButton();
         } catch (error) {
             console.error('Error accessing camera:', error);
             alert('No se puede acceder a la cámara');
+            this.switchCameraBtn.disabled = true;
+        }
+    }
+
+    async detectCameras() {
+        try {
+            const devices = await navigator.mediaDevices.enumerateDevices();
+            this.availableCameras = devices.filter(device => device.kind === 'videoinput');
+            
+            console.log('Available cameras:', this.availableCameras.length);
+            
+            // Si solo hay una cámara, deshabilitar el botón
+            if (this.availableCameras.length <= 1) {
+                this.switchCameraBtn.disabled = true;
+            }
+        } catch (error) {
+            console.error('Error detecting cameras:', error);
+            this.switchCameraBtn.disabled = true;
+        }
+    }
+
+    async switchCamera() {
+        if (this.availableCameras.length <= 1) {
+            console.log('No additional cameras available');
+            return;
+        }
+
+        try {
+            // Detener cámara actual
+            if (this.cameraStream) {
+                this.cameraStream.getTracks().forEach(track => track.stop());
+            }
+
+            // Cambiar a la otra cámara
+            this.currentCamera = this.currentCamera === 'environment' ? 'user' : 'environment';
+            
+            // Iniciar nueva cámara
+            this.cameraStream = await navigator.mediaDevices.getUserMedia({
+                video: {
+                    facingMode: this.currentCamera,
+                    width: { ideal: 1920 },
+                    height: { ideal: 1080 }
+                }
+            });
+            
+            this.cameraView.srcObject = this.cameraStream;
+            
+            // Actualizar botón
+            this.updateCameraButton();
+            
+            console.log('Switched to:', this.currentCamera === 'environment' ? 'Back Camera' : 'Front Camera');
+            
+        } catch (error) {
+            console.error('Error switching camera:', error);
+            alert('Error al cambiar de cámara');
+            
+            // Intentar revertir a la cámara anterior
+            this.currentCamera = this.currentCamera === 'environment' ? 'user' : 'environment';
+            this.startCamera();
+        }
+    }
+
+    updateCameraButton() {
+        if (this.currentCamera === 'environment') {
+            this.switchCameraBtn.innerHTML = '🤳'; // Front camera icon
+            this.switchCameraBtn.title = 'Cambiar a cámara frontal';
+        } else {
+            this.switchCameraBtn.innerHTML = '📷'; // Back camera icon
+            this.switchCameraBtn.title = 'Cambiar a cámara trasera';
         }
     }
 

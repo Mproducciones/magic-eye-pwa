@@ -125,6 +125,30 @@ body, html {
     transform: scale(1.05);
 }
 
+.switch-camera-btn {
+    width: 60px;
+    height: 60px;
+    border-radius: 50%;
+    background: rgba(255, 152, 0, 0.8);
+    border: 3px solid #FF9800;
+    color: white;
+    font-size: 24px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+}
+
+.switch-camera-btn:hover {
+    background: #FF9800;
+    transform: scale(1.05);
+}
+
+.switch-camera-btn:disabled {
+    background: rgba(128, 128, 128, 0.5);
+    border-color: #808080;
+    cursor: not-allowed;
+    transform: none;
+}
+
 /* Select Area Activity */
 #photoCanvas, #selectionCanvas {
     position: absolute;
@@ -386,6 +410,12 @@ body, html {
     }
     
     .gallery-btn {
+        width: 50px;
+        height: 50px;
+        font-size: 20px;
+    }
+    
+    .switch-camera-btn {
         width: 50px;
         height: 50px;
         font-size: 20px;
