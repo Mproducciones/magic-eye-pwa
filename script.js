@@ -19,9 +19,37 @@ class MagicPhotoRevelation {
         this.currentCamera = 'environment'; // 'user' for front, 'environment' for back
         this.availableCameras = [];
         
+        // Card system
+        this.cards = [];
+        this.selectedCard = null;
+        this.cardTouchAreas = [];
+        this.isCardSelectionMode = false;
+        
+        this.initializeCards();
         this.initializeElements();
         this.setupEventListeners();
         this.startApp();
+    }
+
+    initializeCards() {
+        // Inicializar las 52 cartas de poker
+        const suits = ['hearts', 'diamonds', 'clubs', 'spades'];
+        const values = ['01', '02', '03', '04', '05', '06', '07', '08', '09', '10', '11', '12', '13'];
+        const cardNames = ['A', '2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K'];
+        
+        for (let suit of suits) {
+            for (let i = 0; i < values.length; i++) {
+                this.cards.push({
+                    suit: suit,
+                    value: values[i],
+                    name: cardNames[i],
+                    image: `cards/${suit}_${values[i]}.png`,
+                    loaded: false
+                });
+            }
+        }
+        
+        console.log('Initialized', this.cards.length, 'cards');
     }
 
     initializeElements() {
@@ -86,11 +114,11 @@ class MagicPhotoRevelation {
         this.revealBtn.addEventListener('click', () => this.revealPrediction());
 
         // Zoom Canvas Events
-        this.zoomCanvas.addEventListener('mousedown', (e) => this.startDrag(e));
+        this.zoomCanvas.addEventListener('mousedown', (e) => this.handleZoomCanvasClick(e));
         this.zoomCanvas.addEventListener('mousemove', (e) => this.drag(e));
         this.zoomCanvas.addEventListener('mouseup', () => this.endDrag());
         this.zoomCanvas.addEventListener('wheel', (e) => this.handleWheel(e));
-        this.zoomCanvas.addEventListener('touchstart', (e) => this.handleTouchStart(e));
+        this.zoomCanvas.addEventListener('touchstart', (e) => this.handleZoomCanvasTouch(e));
         this.zoomCanvas.addEventListener('touchmove', (e) => this.handleTouchMove(e));
         this.zoomCanvas.addEventListener('touchend', () => this.endDrag());
 
@@ -392,8 +420,88 @@ class MagicPhotoRevelation {
             alert('Por favor selecciona un área primero');
             return;
         }
+        
         this.switchActivity('zoom');
-        this.predictionText.focus();
+        
+        // Hacer zoom al centro de la foto (área del ojo)
+        this.zoomToEye();
+        
+        // Activar modo de selección de cartas
+        this.activateCardSelectionMode();
+    }
+
+    zoomToEye() {
+        // Calcular el centro de la foto (donde estaría el ojo)
+        const centerX = this.zoomCanvas.width / 2;
+        const centerY = this.zoomCanvas.height / 2;
+        
+        // Aplicar zoom al centro
+        this.zoomScale = 3; // Zoom moderado al ojo
+        this.zoomOffsetX = 0;
+        this.zoomOffsetY = 0;
+        
+        // Centrar en el ojo
+        const zoomCtx = this.zoomCanvas.getContext('2d');
+        zoomCtx.save();
+        zoomCtx.scale(this.zoomScale, this.zoomScale);
+        zoomCtx.drawImage(this.photoCanvas, 0, 0);
+        zoomCtx.restore();
+        
+        console.log('Zoomed to eye center:', centerX, centerY);
+    }
+
+    activateCardSelectionMode() {
+        this.isCardSelectionMode = true;
+        this.cardTouchAreas = [];
+        
+        // Crear áreas de toque para las cartas (4x13 grid)
+        const cardWidth = 80;
+        const cardHeight = 120;
+        const spacing = 10;
+        const startX = 50;
+        const startY = 100;
+        
+        for (let row = 0; row < 4; row++) {
+            for (let col = 0; col < 13; col++) {
+                const cardIndex = row * 13 + col;
+                const x = startX + col * (cardWidth + spacing);
+                const y = startY + row * (cardHeight + spacing);
+                
+                this.cardTouchAreas.push({
+                    x: x,
+                    y: y,
+                    width: cardWidth,
+                    height: cardHeight,
+                    card: this.cards[cardIndex],
+                    index: cardIndex
+                });
+            }
+        }
+        
+        // Ocultar input de predicción y mostrar instrucciones
+        this.predictionText.style.display = 'none';
+        this.revealBtn.style.display = 'none';
+        
+        // Añadir instrucciones
+        const instructions = document.createElement('div');
+        instructions.id = 'cardInstructions';
+        instructions.innerHTML = '<p>Toca una carta para seleccionarla</p>';
+        instructions.style.cssText = `
+            position: absolute;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0, 0, 0, 0.8);
+            color: white;
+            padding: 15px 25px;
+            border-radius: 25px;
+            font-size: 16px;
+            z-index: 100;
+            backdrop-filter: blur(10px);
+        `;
+        this.zoomActivity.appendChild(instructions);
+        
+        console.log('Card selection mode activated');
     }
 
     // Zoom Activity - Zoom and Pan
@@ -450,8 +558,18 @@ class MagicPhotoRevelation {
         this.changeZoom(delta);
     }
 
-    handleTouchStart(e) {
-        if (e.touches.length === 1) {
+    handleZoomCanvasClick(e) {
+        if (this.isCardSelectionMode) {
+            this.handleCardSelection(e);
+        } else {
+            this.startDrag(e);
+        }
+    }
+
+    handleZoomCanvasTouch(e) {
+        if (this.isCardSelectionMode && e.touches.length === 1) {
+            this.handleCardSelection(e);
+        } else if (e.touches.length === 1) {
             this.startDrag(e);
         } else if (e.touches.length === 2) {
             // Pinch to zoom
@@ -459,6 +577,93 @@ class MagicPhotoRevelation {
             this.zoomCanvas.dataset.initialDistance = distance;
             this.zoomCanvas.dataset.initialScale = this.zoomScale;
         }
+    }
+
+    handleCardSelection(e) {
+        e.preventDefault();
+        
+        const rect = this.zoomCanvas.getBoundingClientRect();
+        const x = (e.clientX || (e.touches && e.touches[0].clientX)) - rect.left;
+        const y = (e.clientY || (e.touches && e.touches[0].clientY)) - rect.top;
+        
+        // Verificar si el toque está en un área de carta
+        for (let area of this.cardTouchAreas) {
+            if (x >= area.x && x <= area.x + area.width &&
+                y >= area.y && y <= area.y + area.height) {
+                this.selectCard(area.card, area);
+                break;
+            }
+        }
+    }
+
+    selectCard(card, area) {
+        this.selectedCard = card;
+        console.log('Card selected:', card.name, 'of', card.suit);
+        
+        // Dibujar la carta seleccionada sobre el área seleccionada originalmente
+        this.drawSelectedCard(card);
+        
+        // Salir del modo de selección de cartas
+        this.exitCardSelectionMode();
+        
+        // Ir a la vista de resultado
+        setTimeout(() => {
+            this.goToResult();
+        }, 1000);
+    }
+
+    drawSelectedCard(card) {
+        const ctx = this.zoomCanvas.getContext('2d');
+        
+        // Cargar la imagen de la carta
+        const img = new Image();
+        img.onload = () => {
+            // Dibujar la carta sobre el área seleccionada
+            ctx.save();
+            
+            // Aplicar zoom actual
+            ctx.scale(this.zoomScale, this.zoomScale);
+            
+            // Dibujar la carta en el área seleccionada con efecto mágico
+            const cardWidth = this.selectedArea.width;
+            const cardHeight = this.selectedArea.height;
+            
+            // Efecto de aparición gradual
+            ctx.globalAlpha = 0;
+            const fadeIn = setInterval(() => {
+                ctx.clearRect(0, 0, this.zoomCanvas.width, this.zoomCanvas.height);
+                
+                // Redibujar la foto con zoom
+                ctx.drawImage(this.photoCanvas, 0, 0);
+                
+                // Dibujar la carta con transparencia creciente
+                ctx.globalAlpha += 0.1;
+                ctx.drawImage(img, this.selectedArea.x, this.selectedArea.y, cardWidth, cardHeight);
+                
+                if (ctx.globalAlpha >= 1) {
+                    clearInterval(fadeIn);
+                }
+            }, 50);
+            
+            ctx.restore();
+        };
+        img.src = card.image;
+    }
+
+    exitCardSelectionMode() {
+        this.isCardSelectionMode = false;
+        
+        // Eliminar instrucciones
+        const instructions = document.getElementById('cardInstructions');
+        if (instructions) {
+            instructions.remove();
+        }
+        
+        // Restaurar controles de predicción
+        this.predictionText.style.display = 'block';
+        this.revealBtn.style.display = 'block';
+        
+        console.log('Exited card selection mode');
     }
 
     handleTouchMove(e) {
@@ -523,7 +728,7 @@ class MagicPhotoRevelation {
 
     // Result View
     goToResult() {
-        // Draw result with prediction
+        // Draw result with selected card
         const ctx = this.resultCanvas.getContext('2d');
         this.resultCanvas.width = this.zoomCanvas.width;
         this.resultCanvas.height = this.zoomCanvas.height;
@@ -534,6 +739,33 @@ class MagicPhotoRevelation {
         ctx.translate(this.zoomOffsetX / this.zoomScale, this.zoomOffsetY / this.zoomScale);
         ctx.drawImage(this.zoomCanvas, 0, 0);
         ctx.restore();
+
+        // Añadir información de la carta seleccionada
+        if (this.selectedCard) {
+            const cardInfo = document.createElement('div');
+            cardInfo.className = 'card-info';
+            cardInfo.innerHTML = `
+                <div class="card-name">${this.selectedCard.name} of ${this.selectedCard.suit}</div>
+                <div class="magic-text">✨ Magical Revelation ✨</div>
+            `;
+            cardInfo.style.cssText = `
+                position: absolute;
+                bottom: 100px;
+                left: 50%;
+                transform: translateX(-50%);
+                background: linear-gradient(45deg, rgba(138, 43, 226, 0.9), rgba(156, 39, 176, 0.9));
+                color: white;
+                padding: 20px 30px;
+                border-radius: 20px;
+                text-align: center;
+                z-index: 100;
+                backdrop-filter: blur(10px);
+                border: 2px solid rgba(255, 255, 255, 0.3);
+                box-shadow: 0 8px 32px rgba(138, 43, 226, 0.4);
+            `;
+            
+            this.resultView.appendChild(cardInfo);
+        }
 
         this.switchActivity('result');
     }
@@ -548,8 +780,14 @@ class MagicPhotoRevelation {
     }
 
     backToSelectArea() {
+        // Limpiar modo de selección de cartas
+        if (this.isCardSelectionMode) {
+            this.exitCardSelectionMode();
+        }
+        
         this.switchActivity('selectArea');
         this.predictionText.value = '';
+        this.selectedCard = null;
     }
 
     newPhoto() {
