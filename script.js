@@ -479,7 +479,90 @@ window.addEventListener('load', () => {
     new MagicPhotoRevelation();
 });
 
-// Service Worker Registration
+// PWA Installation
+let deferredPrompt;
+
+window.addEventListener('beforeinstallprompt', (e) => {
+    e.preventDefault();
+    deferredPrompt = e;
+    console.log('Install prompt ready');
+    
+    // Mostrar botón de instalación personalizado
+    showInstallButton();
+});
+
+function showInstallButton() {
+    // Crear botón de instalación si no existe
+    if (!document.getElementById('installBtn')) {
+        const installBtn = document.createElement('button');
+        installBtn.id = 'installBtn';
+        installBtn.innerHTML = '📱 Instalar App';
+        installBtn.style.cssText = `
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: linear-gradient(45deg, #8a2be2, #9c27b0);
+            color: white;
+            border: none;
+            padding: 12px 20px;
+            border-radius: 25px;
+            font-size: 14px;
+            font-weight: bold;
+            cursor: pointer;
+            z-index: 1000;
+            box-shadow: 0 4px 20px rgba(138, 43, 226, 0.4);
+            transition: all 0.3s ease;
+        `;
+        
+        installBtn.addEventListener('click', () => {
+            if (deferredPrompt) {
+                deferredPrompt.prompt();
+                deferredPrompt.userChoice.then((choiceResult) => {
+                    if (choiceResult.outcome === 'accepted') {
+                        console.log('PWA installed');
+                        installBtn.style.display = 'none';
+                    }
+                    deferredPrompt = null;
+                });
+            }
+        });
+        
+        installBtn.addEventListener('mouseenter', () => {
+            installBtn.style.transform = 'scale(1.05)';
+        });
+        
+        installBtn.addEventListener('mouseleave', () => {
+            installBtn.style.transform = 'scale(1)';
+        });
+        
+        document.body.appendChild(installBtn);
+    }
+}
+
+// Service Worker Registration con mejoras
 if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('/service-worker.js');
+    window.addEventListener('load', () => {
+        navigator.serviceWorker.register('/service-worker.js')
+            .then((registration) => {
+                console.log('Service Worker registrado:', registration);
+                
+                // Verificar actualizaciones
+                registration.addEventListener('updatefound', () => {
+                    const newWorker = registration.installing;
+                    console.log('Nuevo Service Worker encontrado');
+                    
+                    newWorker.addEventListener('statechange', () => {
+                        if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                            console.log('Nuevo contenido disponible, recarga la página');
+                            if (confirm('Hay una nueva versión disponible. ¿Actualizar ahora?')) {
+                                window.location.reload();
+                            }
+                        }
+                    });
+                });
+            })
+            .catch((error) => {
+                console.error('Error en Service Worker:', error);
+            });
+    });
 }

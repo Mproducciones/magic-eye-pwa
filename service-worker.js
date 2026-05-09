@@ -1,13 +1,13 @@
 // Magic Photo Revelation Service Worker
-const CACHE_NAME = 'magic-photo-revelation-v1';
+const CACHE_NAME = 'magic-photo-revelation-v2';
 const urlsToCache = [
     '/',
     '/index.html',
     '/style.css',
     '/script.js',
     '/manifest.json',
-    '/icon-192.png',
-    '/icon-512.png'
+    '/icon.svg',
+    '/browserconfig.xml'
 ];
 
 // Install Service Worker
